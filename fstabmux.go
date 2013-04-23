@@ -39,17 +39,17 @@ import (
 )
 
 var chrootMap = map[string]bool{
-				"HTTP":true,
-				"HTTPS":true,
-				"FTP":true,
-				"SMB":true,
-				}
-				
+	"HTTP":  true,
+	"HTTPS": true,
+	"FTP":   true,
+	"SMB":   true,
+}
+
 func doChroot(schema string) bool {
 	s := strings.ToUpper(schema)
 	_, ok := chrootMap[s]
 	return ok
-} 
+}
 
 func getFunctionName(i interface{}) string {
 	return runtime.FuncForPC(reflect.ValueOf(i).Pointer()).Name()
@@ -91,12 +91,12 @@ func newReverseProxy(target *url.URL, basedir string) *httputil.ReverseProxy {
 }
 
 type mountList struct {
-	Fstab          map[string]string // map[HOST]MOUNTPOINT
+	Fstab           map[string]string // map[HOST]MOUNTPOINT
 	handlerFuncPool map[string]http.HandlerFunc
-	mux            *http.ServeMux
-	desc           string
-	updatePeriod   time.Duration
-	mutex          sync.RWMutex
+	mux             *http.ServeMux
+	desc            string
+	updatePeriod    time.Duration
+	mutex           sync.RWMutex
 }
 
 func (rp *mountList) Mux() *http.ServeMux {
@@ -120,7 +120,7 @@ func (rp *mountList) mountAll() {
 		case doChroot(path.Scheme):
 			func() {
 				proxy := newReverseProxy(path, val)
-				rp.mux.Handle(val, proxy)
+				rp.Handle(val, proxy)
 			}()
 		case path.Scheme == "":
 			func() {
@@ -131,9 +131,9 @@ func (rp *mountList) mountAll() {
 					log.Printf("Resource not found: %s\n", i)
 				}
 			}()
-		//~ default:
+			//~ default:
 			//~ func() {
-				//~ rp.mux.Handle(val, http.NotFoundHandler())
+			//~ rp.mux.Handle(val, http.NotFoundHandler())
 			//~ }()
 		}
 	}
@@ -169,7 +169,7 @@ func (rp *mountList) chroot(f func(w http.ResponseWriter, r *http.Request)) http
 			ref, _ := url.Parse(r.Header["Referer"][0])
 			for i, val := range rp.Fstab {
 				targURL, _ := url.Parse(i)
-				if doChroot(targURL.Scheme) { 
+				if doChroot(targURL.Scheme) {
 					if strings.Contains(ref.Path, val) {
 						ref.Path = singleJoiningSlash(val, r.URL.Path)
 						http.Redirect(w, r, ref.String(), http.StatusFound)
@@ -193,12 +193,16 @@ func (rp *mountList) dff(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (rp *mountList) HandleFunc(mp string, f http.HandlerFunc) {
+func (rp *mountList) HandleFunc(mp string, f func(w http.ResponseWriter, r *http.Request)) {
 	ff := f
 	if mp == "/" {
 		ff = rp.chroot(f)
 	}
-	rp.mux.HandleFunc(mp, ff)
+	rp.mux.HandleFunc(mp, http.HandlerFunc(ff))
+}
+
+func (rp *mountList) Handle(mp string, f http.Handler) {
+	rp.mux.Handle(mp, f)
 }
 
 func (rp *mountList) autoUpdate() {
