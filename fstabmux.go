@@ -97,6 +97,7 @@ type mountList struct {
 	desc           string
 	updatePeriod   time.Duration
 	mutex          sync.RWMutex
+	lastModTime time.Time // last time desc file has been modified
 }
 
 func (rp *mountList) Mux() *http.ServeMux {
@@ -146,6 +147,13 @@ func (rp *mountList) fetchMountsList() {
 	dec := json.NewDecoder(file)
 	e = dec.Decode(&rp)
 	checkError(e)
+
+	// update rp.lastModTime:
+	fi, errfi := os.Stat(rp.desc)
+	checkError(errfi)
+	if errfi == nil{
+		rp.lastModTime = fi.ModTime()
+	}
 }
 
 func (rp *mountList) updateMountsList() {
@@ -205,7 +213,15 @@ func (rp *mountList) autoUpdate() {
 	go func() {
 		for {
 			if rp.updatePeriod != time.Duration(0) {
-				rp.updateMountsList()
+				// update if desc file has been touched
+				fi, err := os.Stat(rp.desc)
+				checkError(err)
+				if err != nil{
+					continue	
+				}
+				if fi.ModTime() != rp.lastModTime{
+					rp.updateMountsList()
+				}
 			}
 			time.Sleep(rp.updatePeriod)
 		}
