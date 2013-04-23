@@ -25,10 +25,10 @@ package main
 
 import (
 	"github.com/godsic/fstabmux"
+	"io"
 	"log"
 	"net/http"
 	"time"
-	"io"
 )
 
 const FstabFile = "./fstab/fstab.json"
@@ -39,12 +39,11 @@ func Boobies(w http.ResponseWriter, r *http.Request) {
 	io.Copy(w, resp.Body)
 }
 
-
 func main() {
-	
-	jsonMux, _ := fstabmux.NewJSONServeMux(FstabFile)	
+
+	jsonMux, _ := fstabmux.NewJSONServeMux(FstabFile)
 	jsonMux.AddHandlerFuncToPool(Boobies)
-	
+
 	server := &http.Server{
 		Addr:           ServerAddr,
 		Handler:        jsonMux.Mux(),

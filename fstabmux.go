@@ -39,17 +39,17 @@ import (
 )
 
 var chrootMap = map[string]bool{
-				"HTTP":true,
-				"HTTPS":true,
-				"FTP":true,
-				"SMB":true,
-				}
-				
+	"HTTP":  true,
+	"HTTPS": true,
+	"FTP":   true,
+	"SMB":   true,
+}
+
 func doChroot(schema string) bool {
 	s := strings.ToUpper(schema)
 	_, ok := chrootMap[s]
 	return ok
-} 
+}
 
 func getFunctionName(i interface{}) string {
 	return runtime.FuncForPC(reflect.ValueOf(i).Pointer()).Name()
@@ -91,13 +91,13 @@ func newReverseProxy(target *url.URL, basedir string) *httputil.ReverseProxy {
 }
 
 type mountList struct {
-	Fstab          map[string]string // map[HOST]MOUNTPOINT
+	Fstab           map[string]string // map[HOST]MOUNTPOINT
 	handlerFuncPool map[string]http.HandlerFunc
-	mux            *http.ServeMux
-	desc           string
-	updatePeriod   time.Duration
-	mutex          sync.RWMutex
-	lastModTime time.Time // last time desc file has been modified
+	mux             *http.ServeMux
+	desc            string
+	updatePeriod    time.Duration
+	mutex           sync.RWMutex
+	lastModTime     time.Time // last time desc file has been modified
 }
 
 func (rp *mountList) Mux() *http.ServeMux {
@@ -132,9 +132,9 @@ func (rp *mountList) mountAll() {
 					log.Printf("Resource not found: %s\n", i)
 				}
 			}()
-		//~ default:
+			//~ default:
 			//~ func() {
-				//~ rp.mux.Handle(val, http.NotFoundHandler())
+			//~ rp.mux.Handle(val, http.NotFoundHandler())
 			//~ }()
 		}
 	}
@@ -151,7 +151,7 @@ func (rp *mountList) fetchMountsList() {
 	// update rp.lastModTime:
 	fi, errfi := os.Stat(rp.desc)
 	checkError(errfi)
-	if errfi == nil{
+	if errfi == nil {
 		rp.lastModTime = fi.ModTime()
 	}
 }
@@ -177,7 +177,7 @@ func (rp *mountList) chroot(f func(w http.ResponseWriter, r *http.Request)) http
 			ref, _ := url.Parse(r.Header["Referer"][0])
 			for i, val := range rp.Fstab {
 				targURL, _ := url.Parse(i)
-				if doChroot(targURL.Scheme) { 
+				if doChroot(targURL.Scheme) {
 					if strings.Contains(ref.Path, val) {
 						ref.Path = singleJoiningSlash(val, r.URL.Path)
 						http.Redirect(w, r, ref.String(), http.StatusFound)
@@ -216,10 +216,10 @@ func (rp *mountList) autoUpdate() {
 				// update if desc file has been touched
 				fi, err := os.Stat(rp.desc)
 				checkError(err)
-				if err != nil{
-					continue	
+				if err != nil {
+					continue
 				}
-				if fi.ModTime() != rp.lastModTime{
+				if fi.ModTime() != rp.lastModTime {
 					rp.updateMountsList()
 				}
 			}
