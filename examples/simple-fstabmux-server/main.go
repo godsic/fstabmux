@@ -24,11 +24,10 @@
 package main
 
 import (
-	"fstabmux"
+	"github.com/godsic/fstabmux"
 	"log"
 	"net/http"
 	"time"
-	//~ "fmt"
 	"io"
 )
 
