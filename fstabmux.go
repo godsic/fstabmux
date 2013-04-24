@@ -89,7 +89,7 @@ func newReverseProxy(target *url.URL, basedir string) *httputil.ReverseProxy {
 	return &httputil.ReverseProxy{Director: director}
 }
 
-type mountList struct {
+type MountList struct {
 	Fstab           map[string]string // map[HOST]MOUNTPOINT
 	handlerFuncPool map[string]http.HandlerFunc
 	mux             *http.ServeMux
@@ -98,18 +98,19 @@ type mountList struct {
 	mutex           sync.RWMutex
 }
 
-func (m *mountList) Mux() *http.ServeMux {
+func (m *MountList) Mux() *http.ServeMux {
 	return m.mux
 }
 
-func (m *mountList) unmountAllLazy() {
+func (m *MountList) unmountAllLazy() {
 	for i, _ := range m.Fstab {
 		delete(m.Fstab, i)
 	}
-	m.mux = http.NewServeMux()
+	m.mux = nil
 }
 
-func (m *mountList) mountAll() {
+func (m *MountList) mountAll() {
+	m.mux = http.NewServeMux()
 	rootSet := false
 	for i, val := range m.Fstab {
 		if val == "/" {
@@ -122,13 +123,13 @@ func (m *mountList) mountAll() {
 		case doChroot(path.Scheme):
 			func() {
 				proxy := newReverseProxy(path, val)
-				m.Handle(val, proxy)
+				m.handle(val, proxy)
 			}()
 		case path.Scheme == "":
 			func() {
 				f, ok := m.handlerFuncPool[i]
 				if ok {
-					m.HandleFunc(val, f)
+					m.handleFunc(val, f)
 				} else {
 					log.Printf("Resource not found: %s\n", i)
 				}
@@ -140,12 +141,12 @@ func (m *mountList) mountAll() {
 		}
 	}
 	if !rootSet {
-		m.HandleFunc("/", nil)
+		m.handleFunc("/", nil)
 	}
 
 }
 
-func (m *mountList) fetchMountsList() {
+func (m *MountList) fetchMountsList() {
 	file, e := os.Open(m.desc)
 	defer file.Close()
 	checkError(e)
@@ -154,54 +155,60 @@ func (m *mountList) fetchMountsList() {
 	checkError(e)
 }
 
-func (m *mountList) updateMountsList() {
+func (m *MountList) updateMountsList() {
 	m.mutex.Lock()
 	m.unmountAllLazy()
 	m.fetchMountsList()
 	m.mountAll()
-	log.Println(m.mux)
 	m.mutex.Unlock()
 }
 
-func (m *mountList) chroot(f func(w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		ref := r.Header["Referer"]
-		if ref != nil {
-			//~ //~
-			// Merge referer with requested
-			// Fucking golang has no strcmp analog
-			// So nested mounting points are not supported
-			//~ //~
-			ref, _ := url.Parse(r.Header["Referer"][0])
-			for i, val := range m.Fstab {
-				targURL, _ := url.Parse(i)
-				if doChroot(targURL.Scheme) {
-					if strings.Contains(ref.Path, val) {
-						ref.Path = singleJoiningSlash(val, r.URL.Path)
-						http.Redirect(w, r, ref.String(), http.StatusFound)
-					}
+func (m *MountList) chroot(w http.ResponseWriter, r *http.Request) {
+	ref := r.Header["Referer"]
+	if ref != nil {
+		//~ //~
+		// Merge referer with requested
+		// Fucking golang has no strcmp analog
+		// So nested mounting points are not supported
+		//~ //~
+		ref, _ := url.Parse(r.Header["Referer"][0])
+		for i, val := range m.Fstab {
+			targURL, _ := url.Parse(i)
+			if doChroot(targURL.Scheme) {
+				if strings.Contains(ref.Path, val) {
+					ref.Path = singleJoiningSlash(val, r.URL.Path)
+					http.Redirect(w, r, ref.String(), http.StatusFound)
 				}
 			}
-		}
-		if f != nil {
-			f(w, r)
 		}
 	}
 }
 
-func (m *mountList) HandleFunc(mp string, f func(w http.ResponseWriter, r *http.Request)) {
+func (m *MountList) chrootClosure(f func(w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
+	if f == nil {
+		return func(w http.ResponseWriter, r *http.Request) {
+			m.chroot(w, r)
+		}
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		m.chroot(w, r)
+		f(w, r)
+	}
+}
+
+func (m *MountList) handleFunc(mp string, f func(w http.ResponseWriter, r *http.Request)) {
 	ff := f
 	if mp == "/" {
-		ff = m.chroot(f)
+		ff = m.chrootClosure(f)
 	}
 	m.mux.HandleFunc(mp, http.HandlerFunc(ff))
 }
 
-func (m *mountList) Handle(mp string, f http.Handler) {
+func (m *MountList) handle(mp string, f http.Handler) {
 	m.mux.Handle(mp, f)
 }
 
-func (m *mountList) autoUpdate() {
+func (m *MountList) autoUpdate() {
 	go func() {
 		for {
 			fi, e := os.Lstat(m.desc)
@@ -215,19 +222,19 @@ func (m *mountList) autoUpdate() {
 	}()
 }
 
-func (m *mountList) SetUpdatePeriod(period int64) {
+func (m *MountList) SetUpdatePeriod(period int64) {
 	m.updatePeriod = time.Duration(period) * time.Second
 }
 
-func (m *mountList) AddHandlerFuncToPool(f func(http.ResponseWriter, *http.Request)) {
+func (m *MountList) AddHandlerFuncToPool(f func(http.ResponseWriter, *http.Request)) {
 	m.mutex.Lock()
 	m.handlerFuncPool[getFunctionName(f)] = http.HandlerFunc(f)
 	m.mutex.Unlock()
 	m.updateMountsList()
 }
 
-func NewFstabServeMux(desc string) (*mountList, error) {
-	m := new(mountList)
+func NewFstabServeMux(desc string) (*MountList, error) {
+	m := new(MountList)
 	m.handlerFuncPool = make(map[string]http.HandlerFunc)
 	m.desc = desc
 	m.updateMountsList()
