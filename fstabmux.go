@@ -208,7 +208,10 @@ func (rp *mountList) Handle(mp string, f http.Handler) {
 func (rp *mountList) autoUpdate() {
 	go func() {
 		for {
-			if rp.updatePeriod != time.Duration(0) {
+			fi, e := os.Lstat(rp.desc)
+			checkError(e)	
+			lastupdate := time.Since(fi.ModTime())
+			if rp.updatePeriod != time.Duration(0) && lastupdate < rp.updatePeriod {
 				rp.updateMountsList()
 			}
 			time.Sleep(rp.updatePeriod)
