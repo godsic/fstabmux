@@ -48,7 +48,7 @@ var chrootMap = map[string]bool{
 func doChroot(schema string) bool {
 	s := strings.ToUpper(schema)
 	val, ok := chrootMap[s]
-	return (val & ok)
+	return (val && ok)
 }
 
 func getFunctionName(i interface{}) string {
@@ -111,8 +111,11 @@ func (m *mountList) unmountAllLazy() {
 }
 
 func (m *mountList) mountAll() {
-	m.HandleFunc("/", m.df)
+	rootSet := false
 	for i, val := range m.Fstab {
+		if val == "/" {
+			rootSet = true
+		}
 		log.Printf("%s -> %s\n", i, val)
 		path, err := url.Parse(i)
 		checkError(err)
@@ -137,6 +140,10 @@ func (m *mountList) mountAll() {
 			}()
 		}
 	}
+	if !rootSet {
+		m.HandleFunc("/", nil)
+	}
+
 }
 
 func (m *mountList) fetchMountsList() {
@@ -177,7 +184,9 @@ func (m *mountList) chroot(f func(w http.ResponseWriter, r *http.Request)) http.
 				}
 			}
 		}
-		f(w, r)
+		if f != nil {
+			f(w, r)
+		}
 	}
 }
 
