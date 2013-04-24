@@ -40,15 +40,15 @@ import (
 
 var chrootMap = map[string]bool{
 	"HTTP":  true,
-	"HTTPS": true,
-	"FTP":   true,
-	"SMB":   true,
+	"HTTPS": false,
+	"FTP":   false,
+	"SMB":   false,
 }
 
 func doChroot(schema string) bool {
 	s := strings.ToUpper(schema)
-	_, ok := chrootMap[s]
-	return ok
+	val, ok := chrootMap[s]
+	return (val & ok)
 }
 
 func getFunctionName(i interface{}) string {
