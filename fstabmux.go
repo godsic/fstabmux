@@ -131,10 +131,10 @@ func (m *mountList) mountAll() {
 					log.Printf("Resource not found: %s\n", i)
 				}
 			}()
-			//~ default:
-			//~ func() {
-			//~ m.mux.Handle(val, http.NotFoundHandler())
-			//~ }()
+		default:
+			func() {
+				m.mux.Handle(val, http.NotFoundHandler())
+			}()
 		}
 	}
 }
