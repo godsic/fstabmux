@@ -25,7 +25,6 @@ package fstabmux
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"net/http/httputil"
@@ -187,18 +186,6 @@ func (m *mountList) chroot(f func(w http.ResponseWriter, r *http.Request)) http.
 		if f != nil {
 			f(w, r)
 		}
-	}
-}
-
-func (m *mountList) df(w http.ResponseWriter, r *http.Request) {
-	for i, val := range m.Fstab {
-		fmt.Fprintf(w, "%s -> %s\n", i, val)
-	}
-}
-
-func (m *mountList) dff(w http.ResponseWriter, r *http.Request) {
-	for i, val := range m.Fstab {
-		fmt.Fprintf(w, "%s ->->-> %s\n", i, val)
 	}
 }
 
