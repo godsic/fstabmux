@@ -99,20 +99,20 @@ type mountList struct {
 	mutex           sync.RWMutex
 }
 
-func (rp *mountList) Mux() *http.ServeMux {
-	return rp.mux
+func (m *mountList) Mux() *http.ServeMux {
+	return m.mux
 }
 
-func (rp *mountList) unmountAllLazy() {
-	for i, _ := range rp.Fstab {
-		delete(rp.Fstab, i)
+func (m *mountList) unmountAllLazy() {
+	for i, _ := range m.Fstab {
+		delete(m.Fstab, i)
 	}
-	rp.mux = http.NewServeMux()
+	m.mux = http.NewServeMux()
 }
 
-func (rp *mountList) mountAll() {
-	rp.HandleFunc("/", rp.df)
-	for i, val := range rp.Fstab {
+func (m *mountList) mountAll() {
+	m.HandleFunc("/", m.df)
+	for i, val := range m.Fstab {
 		log.Printf("%s -> %s\n", i, val)
 		path, err := url.Parse(i)
 		checkError(err)
@@ -120,44 +120,44 @@ func (rp *mountList) mountAll() {
 		case doChroot(path.Scheme):
 			func() {
 				proxy := newReverseProxy(path, val)
-				rp.Handle(val, proxy)
+				m.Handle(val, proxy)
 			}()
 		case path.Scheme == "":
 			func() {
-				f, ok := rp.handlerFuncPool[i]
+				f, ok := m.handlerFuncPool[i]
 				if ok {
-					rp.HandleFunc(val, f)
+					m.HandleFunc(val, f)
 				} else {
 					log.Printf("Resource not found: %s\n", i)
 				}
 			}()
 			//~ default:
 			//~ func() {
-			//~ rp.mux.Handle(val, http.NotFoundHandler())
+			//~ m.mux.Handle(val, http.NotFoundHandler())
 			//~ }()
 		}
 	}
 }
 
-func (rp *mountList) fetchMountsList() {
-	file, e := os.Open(rp.desc)
+func (m *mountList) fetchMountsList() {
+	file, e := os.Open(m.desc)
 	defer file.Close()
 	checkError(e)
 	dec := json.NewDecoder(file)
-	e = dec.Decode(&rp)
+	e = dec.Decode(&m)
 	checkError(e)
 }
 
-func (rp *mountList) updateMountsList() {
-	rp.mutex.Lock()
-	rp.unmountAllLazy()
-	rp.fetchMountsList()
-	rp.mountAll()
-	log.Println(rp.mux)
-	rp.mutex.Unlock()
+func (m *mountList) updateMountsList() {
+	m.mutex.Lock()
+	m.unmountAllLazy()
+	m.fetchMountsList()
+	m.mountAll()
+	log.Println(m.mux)
+	m.mutex.Unlock()
 }
 
-func (rp *mountList) chroot(f func(w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
+func (m *mountList) chroot(f func(w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ref := r.Header["Referer"]
 		if ref != nil {
@@ -167,7 +167,7 @@ func (rp *mountList) chroot(f func(w http.ResponseWriter, r *http.Request)) http
 			// So nested mounting points are not supported
 			//~ //~
 			ref, _ := url.Parse(r.Header["Referer"][0])
-			for i, val := range rp.Fstab {
+			for i, val := range m.Fstab {
 				targURL, _ := url.Parse(i)
 				if doChroot(targURL.Scheme) {
 					if strings.Contains(ref.Path, val) {
@@ -181,61 +181,61 @@ func (rp *mountList) chroot(f func(w http.ResponseWriter, r *http.Request)) http
 	}
 }
 
-func (rp *mountList) df(w http.ResponseWriter, r *http.Request) {
-	for i, val := range rp.Fstab {
+func (m *mountList) df(w http.ResponseWriter, r *http.Request) {
+	for i, val := range m.Fstab {
 		fmt.Fprintf(w, "%s -> %s\n", i, val)
 	}
 }
 
-func (rp *mountList) dff(w http.ResponseWriter, r *http.Request) {
-	for i, val := range rp.Fstab {
+func (m *mountList) dff(w http.ResponseWriter, r *http.Request) {
+	for i, val := range m.Fstab {
 		fmt.Fprintf(w, "%s ->->-> %s\n", i, val)
 	}
 }
 
-func (rp *mountList) HandleFunc(mp string, f func(w http.ResponseWriter, r *http.Request)) {
+func (m *mountList) HandleFunc(mp string, f func(w http.ResponseWriter, r *http.Request)) {
 	ff := f
 	if mp == "/" {
-		ff = rp.chroot(f)
+		ff = m.chroot(f)
 	}
-	rp.mux.HandleFunc(mp, http.HandlerFunc(ff))
+	m.mux.HandleFunc(mp, http.HandlerFunc(ff))
 }
 
-func (rp *mountList) Handle(mp string, f http.Handler) {
-	rp.mux.Handle(mp, f)
+func (m *mountList) Handle(mp string, f http.Handler) {
+	m.mux.Handle(mp, f)
 }
 
-func (rp *mountList) autoUpdate() {
+func (m *mountList) autoUpdate() {
 	go func() {
 		for {
-			fi, e := os.Lstat(rp.desc)
-			checkError(e)	
+			fi, e := os.Lstat(m.desc)
+			checkError(e)
 			lastupdate := time.Since(fi.ModTime())
-			if rp.updatePeriod != time.Duration(0) && lastupdate < rp.updatePeriod {
-				rp.updateMountsList()
+			if m.updatePeriod != time.Duration(0) && lastupdate < m.updatePeriod {
+				m.updateMountsList()
 			}
-			time.Sleep(rp.updatePeriod)
+			time.Sleep(m.updatePeriod)
 		}
 	}()
 }
 
-func (rp *mountList) SetUpdatePeriod(period int64) {
-	rp.updatePeriod = time.Duration(period) * time.Second
+func (m *mountList) SetUpdatePeriod(period int64) {
+	m.updatePeriod = time.Duration(period) * time.Second
 }
 
-func (rp *mountList) AddHandlerFuncToPool(f func(http.ResponseWriter, *http.Request)) {
-	rp.mutex.Lock()
-	rp.handlerFuncPool[getFunctionName(f)] = http.HandlerFunc(f)
-	rp.mutex.Unlock()
-	rp.updateMountsList()
+func (m *mountList) AddHandlerFuncToPool(f func(http.ResponseWriter, *http.Request)) {
+	m.mutex.Lock()
+	m.handlerFuncPool[getFunctionName(f)] = http.HandlerFunc(f)
+	m.mutex.Unlock()
+	m.updateMountsList()
 }
 
-func NewJSONServeMux(desc string) (*mountList, error) {
-	rp := new(mountList)
-	rp.handlerFuncPool = make(map[string]http.HandlerFunc)
-	rp.desc = desc
-	rp.updateMountsList()
-	rp.SetUpdatePeriod(10)
-	rp.autoUpdate()
-	return rp, nil
+func NewFstabServeMux(desc string) (*mountList, error) {
+	m := new(mountList)
+	m.handlerFuncPool = make(map[string]http.HandlerFunc)
+	m.desc = desc
+	m.updateMountsList()
+	m.SetUpdatePeriod(10)
+	m.autoUpdate()
+	return m, nil
 }
